@@ -1,0 +1,22 @@
+{
+  "name": "semver-query",
+  "version": "0.1.0",
+  "description": "Query whether a semantic version satisfies a comparator expression, with precise line/column error messages.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "semver-query": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "author": "sonia-labs63"
+}
