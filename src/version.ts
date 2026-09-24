@@ -14,7 +14,7 @@ function isDigits(s: string): boolean {
   return s.length > 0 && /^[0-9]+$/.test(s);
 }
 
-function parseNumericField(field: string, offset: number, name: string): number {
+export function parseNumericField(field: string, offset: number, name: string): number {
   if (field.length === 0) {
     throw new SemverError(`missing ${name} version number`, offset, 1);
   }

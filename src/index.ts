@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { SemverError, formatError } from "./errors.js";
-import { type Version, compareVersions, formatVersion, parseVersion } from "./version.js";
+import { type Version, compareVersions, formatVersion, parseNumericField, parseVersion } from "./version.js";
 
 export { SemverError, formatError } from "./errors.js";
 export { type Version, compareVersions, formatVersion, parseVersion } from "./version.js";
@@ -40,6 +40,66 @@ export function parseComparator(input: string, baseOffset = 0): Comparator {
   // No operator prefix: treat the whole token as an exact-match version.
   const version = parseVersion(input, baseOffset);
   return { operator: "=", version };
+}
+
+const FIELD_NAMES = ["major", "minor", "patch"] as const;
+
+function isWildcardToken(s: string): boolean {
+  return s === "x" || s === "X" || s === "*";
+}
+
+export interface XRangeBounds {
+  lower: Version;
+  // null means "no upper bound" (a bare `x` or `*` matches anything).
+  upper: Version | null;
+}
+
+// Recognizes 1.2.x, 1.x (== 1.x.x), and bare x / * — but only when a
+// wildcard is actually present, so plain versions and other malformed
+// input fall straight through to parseVersion's error reporting.
+export function parseXRange(input: string, baseOffset = 0): XRangeBounds | null {
+  const parts = input.split(".");
+  if (parts.length > 3) return null;
+
+  const wildcardIndex = parts.findIndex(isWildcardToken);
+  if (wildcardIndex === -1) return null;
+
+  let cursor = baseOffset;
+  const fields = [0, 0];
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (i < wildcardIndex) {
+      fields[i] = parseNumericField(part, cursor, FIELD_NAMES[i]);
+    } else if (!isWildcardToken(part)) {
+      throw new SemverError(`expected 'x' after wildcard in x-range, found '${part}'`, cursor, part.length);
+    }
+    cursor += part.length + 1;
+  }
+
+  const base: Version = { major: fields[0], minor: fields[1], patch: 0, prerelease: [], build: [] };
+
+  if (wildcardIndex === 0) return { lower: base, upper: null }; // "x" / "*": any version
+  if (wildcardIndex === 1) return { lower: base, upper: { ...base, major: base.major + 1, minor: 0 } }; // "1.x"
+  return { lower: base, upper: { ...base, minor: base.minor + 1 } }; // "1.2.x"
+}
+
+// Expands a comparator token into one or more AND'd comparators. Most tokens
+// are a single comparator, but an x-range like `1.2.x` is really shorthand
+// for `>=1.2.0 <1.3.0`.
+export function parseComparators(input: string, baseOffset = 0): Comparator[] {
+  if (input.length === 0) {
+    throw new SemverError("expected a comparator, found empty string", baseOffset, 1);
+  }
+  const hasOperatorPrefix = OPERATORS.some((op) => input.startsWith(op));
+  if (!hasOperatorPrefix) {
+    const range = parseXRange(input, baseOffset);
+    if (range !== null) {
+      const comparators: Comparator[] = [{ operator: ">=", version: range.lower }];
+      if (range.upper !== null) comparators.push({ operator: "<", version: range.upper });
+      return comparators;
+    }
+  }
+  return [parseComparator(input, baseOffset)];
 }
 
 function satisfiesTilde(version: Version, base: Version): boolean {
@@ -110,7 +170,7 @@ export function parseQueryLine(line: string, baseOffset = 0): Query {
   if (rest.length === 0) {
     throw new SemverError("expected at least one comparator after the version", baseOffset + line.length, 1);
   }
-  const comparators = rest.map((t) => parseComparator(t.text, t.offset));
+  const comparators = rest.flatMap((t) => parseComparators(t.text, t.offset));
   return { version, comparators };
 }
 

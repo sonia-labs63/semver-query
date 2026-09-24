@@ -53,9 +53,17 @@ The tool exits non-zero if any query line failed to parse.
 | `<1.2.3`, `<=1.2.3` | less than / or equal |
 | `^1.2.3` | compatible within the same major (or minor, if major is 0) |
 | `~1.2.3` | compatible within the same minor |
+| `1.2.x` | matches any patch version: `>=1.2.0 <1.3.0` |
+| `1.x` (same as `1.x.x`) | matches any minor and patch version: `>=1.0.0 <2.0.0` |
+| `x`, `*` | matches anything |
 
-Not supported yet: hyphen ranges (`1.2.3 - 2.3.4`), OR ranges (`||`), and
-x-ranges (`1.2.x`, `1.x`). Those are next.
+X-ranges only work as comparators, not as the version being tested — the
+thing under test always has to be a real, exact version. A query like
+`1.4.2 1.x` expands the `1.x` comparator into `>=1.0.0` and `<2.0.0` before
+checking it.
+
+Not supported yet: hyphen ranges (`1.2.3 - 2.3.4`) and OR ranges (`||`).
+Those are next.
 
 ## As a library
 
@@ -73,6 +81,11 @@ satisfies(version, range); // true
 filename, error)` turns that into the same diagnostic format the CLI prints,
 so you can reuse it if you're parsing versions that came from somewhere other
 than a queries file.
+
+`parseComparator` only ever returns one comparator, so it doesn't understand
+x-ranges. Use `parseComparators` (plural) for that — it returns a
+`Comparator[]`, expanding something like `1.2.x` into its `>=`/`<` pair and
+falling back to a single-element array for everything else.
 
 ## Building
 
